@@ -4,31 +4,28 @@
 #include <wx/thread.h>
 #include <wx/event.h>
 #include <sdk.h>
+#include <map>
 
-//#include <cbproject.h>
+#include <cbproject.h>
+#include "cbGitStates.h"
 
 class cbProject;
-//???????????????????????????????????????????????????????????????
-//BEGIN_DECLARE_EVENT_TYPES()
-//    DECLARE_EVENT_TYPE(wxEVT_SCANNER_THREAD_UPDATE, wxID_ANY)
-//END_DECLARE_EVENT_TYPES()
 
-//wxDECLARE_EVENT(MY_NEW_TYPE, wxCommandEvent);
-wxDECLARE_EVENT( wxEVT_SCANNER_7THREAD_UPDATE, wxCommandEvent);
+wxDECLARE_EVENT( wxEVT_SCANNER_THREAD_UPDATE, wxCommandEvent);
 
 class cbGitStateScannerThread : public wxThread
 {
     private:
         std::string testString ;
-
+        std::map <std::string, cbGitFileState> prjmap_ ;
+        typedef std::map <std::string, cbGitFileState> prjmap_t ;
     public:
         cbGitStateScannerThread(wxEvtHandler* pHandler, cbProject *prj);
-//        cbGitStateScannerThread(wxEvtHandler* pHandler);
+        typedef std::pair< cbProject*, prjmap_t*> return_t;
         virtual ~cbGitStateScannerThread();
-
-//        typedef std::pair< cbProject*,  string_t> prjstr_t;
     private:
         cbProject *prj_;
+        prjmap_t *statemap_;
         void* Entry();
 
     protected:

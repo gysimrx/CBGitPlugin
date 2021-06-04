@@ -51,6 +51,7 @@
 		<Unit filename="cbGit.h" />
 		<Unit filename="cbGitStateScannerThread.cpp" />
 		<Unit filename="cbGitStateScannerThread.h" />
+		<Unit filename="cbGitStates.h" />
 		<Unit filename="manifest.xml" />
 		<Extensions />
 	</Project>

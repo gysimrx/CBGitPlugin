@@ -26,7 +26,7 @@ namespace
 
 // events handling
 BEGIN_EVENT_TABLE(cbGit, cbPlugin)
-    EVT_COMMAND(wxID_ANY, wxEVT_SCANNER_7THREAD_UPDATE, cbGit::OnStateScannerThread)
+    EVT_COMMAND(wxID_ANY, wxEVT_SCANNER_THREAD_UPDATE, cbGit::OnStateScannerThread)
 //    EVT_COMMAND(wxID_ANY, MY_NEW_TYPE, cbGit::OnStateScannerThread)
     EVT_MENU(ID_REVERT,     cbGit::OnRevert)
 //    EVT_MENU(ID_UPDATE,     cbGit::OnUpdate)
@@ -187,8 +187,6 @@ void cbGit::ChangeFileStateVisual()
     else
         forCommandSelectedFileNameShort->SetFileState(fvsVcUpToDate);
 
-
-
 //
     OnlyForTesting = !OnlyForTesting;
 }
@@ -206,20 +204,32 @@ public:
 
 void cbGit::OnStateScannerThread(wxCommandEvent& event)
 {
+    typedef std::map<std::string, cbGitFileState> statemap_t ;
     std::string *test;
-//    test = (cbGitStateScannerThread)event.GetClientData();
-    test = ( std::string*)event.GetClientData();
-
-    if(*test == "Hallo")
-         wxMessageBox(wxString("ItIs"));
+    cbGitFileState statusofFile;
+//    std::pair<cbProject*, statemap_t*> *prjmap;
+//    prjmap = ( std::pair<cbProject*, statemap_t*>)event.GetClientData();;
 
 
-//    wxMessageBox(test);
-    delete test;
+    cbGitStateScannerThread::return_t *statemap = (cbGitStateScannerThread::return_t*)event.GetClientData();
+    cbProject *prj = statemap->first;
+    statemap_t *map_name_state = statemap->second;
+
+    wxString prjpath = prj->GetFilename();
+    wxMessageBox(wxString("Project: ")+prjpath);
+    for (statemap_t::iterator it=map_name_state->begin(); it!=map_name_state->end(); ++it)
+    {
+        statusofFile = it->second;
+        std::string  filepath = it->first;
+        if(statusofFile.state == cbGitFileState::modified)
+            wxMessageBox(wxString("modified: "+filepath));
+    }
+
+    delete statemap;
 
 //    cbGitStateScannerThread::std::string threadString = (cbGitStateScannerThread)event.GetClientData();
 //    cbGitStateScannerThread::string_t test2 = (cbGitStateScannerThread::string_t)event.GetClientData();
-//      test = event.GetClientData();
+//    test = event.GetClientData();
 //    test = cbGitStateScannerThread event.GetClientData();
 }
 
