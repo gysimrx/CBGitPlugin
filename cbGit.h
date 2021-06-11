@@ -121,18 +121,17 @@ class cbGit : public cbPlugin
         void OnProjectFileRemoved(CodeBlocksEvent& event);
         void OnFileSaveOrClose(CodeBlocksEvent& event);
 
+        void StartUpdateThread(wxCommandEvent& event);
         void OnRevert(wxCommandEvent& event);
-        void ChangeFileStateVisual();
 
         void appendMenu(cbProject *prj, ProjectFile *prjFile, wxMenu *menu);
         void OnStateScannerThread(wxCommandEvent& event);
-//        void OnUpdate(wxCommandEvent& event);
+
+        void UpdateThread(cbProject *project);
+        void UpdateThread(void);
 
         std::string forCommandSelectedFileName;
         cbProject *forCommandSelectedProject;
-
-        bool OnlyForTesting = false;
-        ProjectFile *forCommandSelectedFileNameShort;
 
     private:
         DECLARE_EVENT_TABLE();

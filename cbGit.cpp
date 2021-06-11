@@ -20,16 +20,14 @@ namespace
 {
     PluginRegistrant<cbGit> reg(_T("cbGit"));
         auto ID_REVERT            = wxNewId();
-//        auto ID_UPDATE            = wxNewId();
+        auto ID_FORCEUPDATE       = wxNewId();
 }
-//wxDEFINE_EVENT(wxEVT_SCANNER_THREAD_UPDATE, wxCommandEvent);
 
 // events handling
 BEGIN_EVENT_TABLE(cbGit, cbPlugin)
     EVT_COMMAND(wxID_ANY, wxEVT_SCANNER_THREAD_UPDATE, cbGit::OnStateScannerThread)
-//    EVT_COMMAND(wxID_ANY, MY_NEW_TYPE, cbGit::OnStateScannerThread)
     EVT_MENU(ID_REVERT,     cbGit::OnRevert)
-//    EVT_MENU(ID_UPDATE,     cbGit::OnUpdate)
+    EVT_MENU(ID_FORCEUPDATE,     cbGit::StartUpdateThread)
 
     // add any events you want to handle here
 END_EVENT_TABLE()
@@ -63,11 +61,11 @@ void cbGit::OnAttach()
 
     pm->RegisterEventSink(cbEVT_PROJECT_NEW, new cbEventFunctor<cbGit, CodeBlocksEvent>(this, &cbGit::OnProjectOpen));
     pm->RegisterEventSink(cbEVT_PROJECT_CLOSE, new cbEventFunctor<cbGit, CodeBlocksEvent>(this, &cbGit::OnProjectClose));
-    pm->RegisterEventSink(cbEVT_PROJECT_OPEN, new cbEventFunctor<cbGit, CodeBlocksEvent>(this, &cbGit::OnProjectOpen));
+    pm->RegisterEventSink(cbEVT_PROJECT_ACTIVATE, new cbEventFunctor<cbGit, CodeBlocksEvent>(this, &cbGit::OnProjectOpen));
     pm->RegisterEventSink(cbEVT_PROJECT_FILE_ADDED, new cbEventFunctor<cbGit, CodeBlocksEvent>(this, &cbGit::OnProjectFileAdded));
     pm->RegisterEventSink(cbEVT_PROJECT_FILE_REMOVED, new cbEventFunctor<cbGit, CodeBlocksEvent>(this, &cbGit::OnProjectFileRemoved));
     pm->RegisterEventSink(cbEVT_EDITOR_SAVE, new cbEventFunctor<cbGit, CodeBlocksEvent>(this, &cbGit::OnFileSaveOrClose));
-    pm->RegisterEventSink(cbEVT_EDITOR_CLOSE, new cbEventFunctor<cbGit, CodeBlocksEvent>(this, &cbGit::OnFileSaveOrClose));
+//    pm->RegisterEventSink(cbEVT_EDITOR_CLOSE, new cbEventFunctor<cbGit, CodeBlocksEvent>(this, &cbGit::OnFileSaveOrClose)); //May causes Problems when closing IDE?
 
 
 
@@ -130,12 +128,10 @@ void cbGit::appendMenu(cbProject *prj, ProjectFile *prjFile, wxMenu *menu)
 
     wxMenu *gitMenu = new wxMenu();
     forCommandSelectedFileName = std::string(prjFile->file.GetFullPath().c_str());
-    forCommandSelectedFileNameShort = prjFile;
     forCommandSelectedProject = prj;
     gitMenu->Append(ID_REVERT, "Revert", "revert to base");
-//    gitMenu->Append(ID_UPDATE, "Update", "update file in working copy");
+    gitMenu->Append(ID_FORCEUPDATE, "ForceUpdate", "Force UpdateThread for Testing");
     menu->AppendSubMenu(gitMenu, "GIT");
-
 }
 
 bool cbGit::BuildToolBar(wxToolBar* toolBar)
@@ -151,135 +147,108 @@ bool cbGit::BuildToolBar(wxToolBar* toolBar)
 
 void cbGit::OnProjectClose(CodeBlocksEvent& event)
 {
-//    wxMessageBox(wxString("Project Closed "));
+
 }
-void cbGit::OnProjectOpen(CodeBlocksEvent& event)
+
+void cbGit::OnProjectOpen(CodeBlocksEvent& event)       //Doesn't Work
 {
-//    wxMessageBox(wxString("Project Opend "));
+    UpdateThread();
 }
+
+void cbGit::StartUpdateThread(wxCommandEvent& event)
+{
+    UpdateThread(forCommandSelectedProject);
+}
+
 void cbGit::OnProjectFileAdded(CodeBlocksEvent& event)
 {
-//    wxMessageBox(wxString("Project File Added "));
+    UpdateThread(forCommandSelectedProject);
 }
+
 void cbGit::OnProjectFileRemoved(CodeBlocksEvent& event)
 {
-//    wxMessageBox(wxString("Project File removed "));
+
 }
 void cbGit::OnFileSaveOrClose(CodeBlocksEvent& event)
 {
-//    wxMessageBox(wxString("fileSavedOrClosed "));
+    // To Do: !!!! Get Project that the file has been saved in
+    UpdateThread();
+
+
 }
 
 void cbGit::OnRevert(wxCommandEvent& event)
 {
-    wxMessageBox(wxString("Revert ")+forCommandSelectedFileName);
-    ChangeFileStateVisual();
 
-    cbGitStateScannerThread *thread = new cbGitStateScannerThread( this, forCommandSelectedProject );
-    thread->Create();
-    thread->Run();
+    UpdateThread(forCommandSelectedProject);
 }
-
-void cbGit::ChangeFileStateVisual()
-{
-    if(OnlyForTesting)
-        forCommandSelectedFileNameShort->SetFileState(fvsVcModified);
-    else
-        forCommandSelectedFileNameShort->SetFileState(fvsVcUpToDate);
-
-//
-    OnlyForTesting = !OnlyForTesting;
-}
-
-class TestThread: public wxThread
-{
-public:
-  void *Entry()
-  {
-     // do something
-//      wxMessageBox(wxString("entry"));
-     return 0;
-  }
-};
 
 void cbGit::OnStateScannerThread(wxCommandEvent& event)
 {
     typedef std::map<std::string, cbGitFileState> statemap_t ;
-    std::string *test;
-    cbGitFileState statusofFile;
-//    std::pair<cbProject*, statemap_t*> *prjmap;
-//    prjmap = ( std::pair<cbProject*, statemap_t*>)event.GetClientData();;
 
+    cbGitFileState statusofFile;
 
     cbGitStateScannerThread::return_t *statemap = (cbGitStateScannerThread::return_t*)event.GetClientData();
     cbProject *prj = statemap->first;
+    wxMessageBox(wxString("Recieved thread for Project")+prj->GetBasePath());
+
+    if(!Manager::Get()->GetProjectManager()->IsProjectStillOpen(prj))
+    {
+        delete statemap;
+        wxMessageBox(wxString("Project ")+prj->GetBasePath()+wxString(" Is not opend"));
+        return;
+    }
+
     statemap_t *map_name_state = statemap->second;
 
-    wxString prjpath = prj->GetFilename();
-    wxMessageBox(wxString("Project: ")+prjpath);
     for (statemap_t::iterator it=map_name_state->begin(); it!=map_name_state->end(); ++it)
     {
         statusofFile = it->second;
         std::string  filepath = it->first;
-        if(statusofFile.state == cbGitFileState::modified)
-            wxMessageBox(wxString("modified: "+filepath));
+        wxString wxfilepath(filepath);
+        if(prj->GetFileByFilename(wxfilepath,false,true) != NULL );
+        {
+            ProjectFile *prjfile = prj->GetFileByFilename(wxfilepath,false,true);
+
+            if(prjfile != NULL)
+            {
+                switch (statusofFile.state)
+                {
+                    case cbGitFileState::unmodified : prjfile->SetFileState(fvsVcUpToDate);
+                                                      break;
+                    case cbGitFileState::modified   : prjfile->SetFileState(fvsVcModified);
+                                                      break;
+                    case cbGitFileState::newfile    : prjfile->SetFileState(fvsVcNonControlled);
+                                                      break;
+                    case cbGitFileState::deleted    : prjfile->SetFileState(fvsVcMissing);
+                                                      break;
+                    case cbGitFileState::ignored    : prjfile->SetFileState(fvsVcNonControlled);
+                                                      break;
+                }
+            }
+        }
+
     }
 
     delete statemap;
-
-//    cbGitStateScannerThread::std::string threadString = (cbGitStateScannerThread)event.GetClientData();
-//    cbGitStateScannerThread::string_t test2 = (cbGitStateScannerThread::string_t)event.GetClientData();
-//    test = event.GetClientData();
-//    test = cbGitStateScannerThread event.GetClientData();
 }
+void cbGit::UpdateThread(void)
+{
+    ProjectManager* manager = ProjectManager::Get();
+    cbProject* project = manager->GetActiveProject();
+    UpdateThread(project);
+}
+void cbGit::UpdateThread(cbProject *project)
+{
 
-//class cbGitUpdateThread : public wxThread
-//{
-//public:
-//    cbGitUpdateThread(wxEvtHandler *handler, const cbProject &project) :
-//            wxThread(wxTHREAD_DETACHED),
-//            project_(project),
-//            handler_(handler)
-//    {
-//    }
-//    virtual ~cbGitUpdateThread(){}
-//private:
-//    const cbProject project_;
-//
-//    void* Entry()
-//    {
-////    wxMessageBox(wxString("entry"));
-//       bool debuggerinseperatethread = false;
-////        cbProject prj = prjFile_->GetParentProject();cbGitUpdateThread
-////        wxString prjpath = project_.GetFilename();
-////        std::string path = std::string(prjpath.mb_str());
-////        std::string path = "/home/marx/TestCppGit/awesome_cpp";
-////        auto repo = repository::open(path);
-//
-//
-//
-//        return 0;
-//    }
-//
-//    wxEvtHandler *handler_;
-//};
-//void cbGit::OnUpdate(wxCommandEvent& event)
-//{
-//    cbGitUpdateThread *thread = new cbGitUpdateThread( this, *forCommandSelectedProject );
-//    wxMessageBox(wxString("beforeStartingThread"));
-////    wxThread *thread = new cbGitUpdateThread( this );
-////    cbGitUpdateThread *thread = new cbGitUpdateThread( this );
-//    thread->Create();
-//    thread->Run();
-//
-//
-////    wxThread *test = new TestThread;
-////    test->Create();
-////    test->Run();
-//
-//
-//}
-
+    if(project != NULL)
+    {
+        cbGitStateScannerThread *thread = new cbGitStateScannerThread( this, project );
+        thread->Create();
+        thread->Run();
+    }
+}
 
 
 

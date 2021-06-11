@@ -7,7 +7,7 @@ public:
     enum state_t
     {
         unmodified,
-        fnew, //because of new Keyword
+        newfile,
         modified,
         deleted,
         renamed,

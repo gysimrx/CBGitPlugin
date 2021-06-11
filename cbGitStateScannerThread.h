@@ -16,7 +16,6 @@ wxDECLARE_EVENT( wxEVT_SCANNER_THREAD_UPDATE, wxCommandEvent);
 class cbGitStateScannerThread : public wxThread
 {
     private:
-        std::string testString ;
         std::map <std::string, cbGitFileState> prjmap_ ;
         typedef std::map <std::string, cbGitFileState> prjmap_t ;
     public:
@@ -25,7 +24,6 @@ class cbGitStateScannerThread : public wxThread
         virtual ~cbGitStateScannerThread();
     private:
         cbProject *prj_;
-        prjmap_t *statemap_;
         void* Entry();
 
     protected:
