@@ -6,6 +6,7 @@
 #include <sdk.h>
 #include <map>
 
+#include <cppgit2/repository.hpp>
 #include <cbproject.h>
 #include "cbGitStates.h"
 
@@ -23,6 +24,7 @@ class cbGitStateScannerThread : public wxThread
         typedef std::pair< cbProject*, prjmap_t*> return_t;
         virtual ~cbGitStateScannerThread();
     private:
+        void GetFileStates(cppgit2::repository &repo, std::map <std::string, cbGitFileState>*  prjmap );
         cbProject *prj_;
         void* Entry();
 

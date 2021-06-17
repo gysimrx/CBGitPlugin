@@ -171,15 +171,14 @@ void cbGit::OnProjectFileRemoved(CodeBlocksEvent& event)
 }
 void cbGit::OnFileSaveOrClose(CodeBlocksEvent& event)
 {
-    // To Do: !!!! Get Project that the file has been saved in
-    UpdateThread();
+    cbProject* project = event.GetProject();
+    UpdateThread(project);
 
 
 }
 
 void cbGit::OnRevert(wxCommandEvent& event)
 {
-
     UpdateThread(forCommandSelectedProject);
 }
 
@@ -201,36 +200,31 @@ void cbGit::OnStateScannerThread(wxCommandEvent& event)
     }
 
     statemap_t *map_name_state = statemap->second;
-
     for (statemap_t::iterator it=map_name_state->begin(); it!=map_name_state->end(); ++it)
     {
         statusofFile = it->second;
         std::string  filepath = it->first;
         wxString wxfilepath(filepath);
-        if(prj->GetFileByFilename(wxfilepath,false,true) != NULL );
+
+        if(prj->GetFileByFilename(wxfilepath,false,true) != NULL )
         {
             ProjectFile *prjfile = prj->GetFileByFilename(wxfilepath,false,true);
-
-            if(prjfile != NULL)
+            switch (statusofFile.state)
             {
-                switch (statusofFile.state)
-                {
-                    case cbGitFileState::unmodified : prjfile->SetFileState(fvsVcUpToDate);
-                                                      break;
-                    case cbGitFileState::modified   : prjfile->SetFileState(fvsVcModified);
-                                                      break;
-                    case cbGitFileState::newfile    : prjfile->SetFileState(fvsVcNonControlled);
-                                                      break;
-                    case cbGitFileState::deleted    : prjfile->SetFileState(fvsVcMissing);
-                                                      break;
-                    case cbGitFileState::ignored    : prjfile->SetFileState(fvsVcNonControlled);
-                                                      break;
-                }
+                case cbGitFileState::unmodified : prjfile->SetFileState(fvsVcUpToDate);
+                                                  break;
+                case cbGitFileState::modified   : prjfile->SetFileState(fvsVcModified);
+                                                  break;
+                case cbGitFileState::newfile    : prjfile->SetFileState(fvsVcNonControlled);
+                                                  break;
+                case cbGitFileState::deleted    : prjfile->SetFileState(fvsVcMissing);
+                                                  break;
+                case cbGitFileState::ignored    : prjfile->SetFileState(fvsVcNonControlled);
+                                                  break;
             }
         }
 
     }
-
     delete statemap;
 }
 void cbGit::UpdateThread(void)
