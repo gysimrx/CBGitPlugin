@@ -9,6 +9,7 @@
 
 #include <wx/dynlib.h>
 #include <logmanager.h>
+#include <wx/dir.h>
 
 
 #include <cppgit2/repository.hpp>

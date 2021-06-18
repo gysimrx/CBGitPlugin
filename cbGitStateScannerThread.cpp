@@ -4,9 +4,35 @@
 //#include <sdk.h>
 #include <iostream>
 #include <cbproject.h>
+#include <wx/dir.h>
 using namespace cppgit2;
 
 wxDEFINE_EVENT( wxEVT_SCANNER_THREAD_UPDATE, wxCommandEvent);
+
+class wxDirTraverserSimple2 : public wxDirTraverser
+{
+  public:
+    wxDirTraverserSimple2(wxArrayString& files) : m_files(files){}
+    virtual wxDirTraverseResult OnFile(const wxString& filename)
+    {
+        wxString temp = filename.substr(filename.size()-3);
+
+        return wxDIR_CONTINUE;
+    }
+    virtual wxDirTraverseResult OnDir(const wxString& dirname)
+    {
+        wxString temp = dirname.substr(dirname.size()-3);
+        if(temp == "git")
+        {
+            temp = dirname.substr(0,dirname.size()-5);
+            m_files.Add(temp );
+
+        }
+      return wxDIR_CONTINUE;
+    }
+  private:
+    wxArrayString& m_files;
+};
 
 cbGitStateScannerThread::cbGitStateScannerThread(wxEvtHandler* pHandler, cbProject *prj) :
     wxThread(wxTHREAD_DETACHED),
@@ -18,30 +44,21 @@ void *cbGitStateScannerThread::Entry()
 {
     wxString wxpath = prj_->GetBasePath();
     std::string path = wxpath.ToStdString();
-    auto repo = repository::open(path);
-
-
     auto prjmap = new std::map <std::string, cbGitFileState>;
-    GetFileStates(repo, prjmap);
-    auto submoduleURLs = new std::vector<std::string>;
 
-    repo.for_each_submodule(
-        [&submoduleURLs](const submodule &module, const std::string &path) {
-            submoduleURLs->push_back(module.url());
-        });
-    while( !submoduleURLs->empty())
+    wxArrayString files;
+    wxDirTraverserSimple2 traverser(files);
+    wxDir dir(path);
+    dir.Traverse(traverser);
+
+    while(!files.empty())
     {
-        auto repo2 = repository::open(submoduleURLs->back());
-
+        std::string repopath = files.back().ToStdString();
+        auto repo2 = repository::open(repopath);
         GetFileStates(repo2, prjmap);
-        submoduleURLs->pop_back();
+        files.pop_back();
     }
-
-
-
-
     wxCommandEvent *evt = new wxCommandEvent(wxEVT_SCANNER_THREAD_UPDATE, GetId());
-
     evt->SetClientData(new std::pair<cbProject*, prjmap_t*> {prj_, prjmap});
     wxQueueEvent(m_pHandler, evt);
     return 0;
@@ -55,7 +72,7 @@ void cbGitStateScannerThread::GetFileStates(cppgit2::repository &repo, std::map 
     std::string repopath = wxpath.ToStdString();
     std::string additonalpath;
     if(prjpath != repopath)
-        additonalpath = repopath.replace(repopath.find(prjpath), prjpath.size() , "");
+        additonalpath = repopath.substr(prjpath.size(),repopath.size());
 
     status::options optionobj;
     optionobj.set_flags(status::options::flag::include_unmodified | status::options::flag::include_untracked | status::options::flag::include_ignored | status::options::flag::recurse_ignored_dirs | status::options::flag::recurse_untracked_dirs  );
@@ -86,12 +103,12 @@ void cbGitStateScannerThread::GetFileStates(cppgit2::repository &repo, std::map 
             if ((status_flags & status::status_type::ignored) == status::status_type::ignored)
             statusofFile.state = cbGitFileState::ignored;
 
-            (*prjmap)[additonalpath+path] =  statusofFile; // Submodules need nonrelative paths
+            (*prjmap)[additonalpath+path] =  statusofFile; // Subrepos need nonrelative paths
 
         });
 
-
 }
+
 
 cbGitStateScannerThread::~cbGitStateScannerThread()
 {
