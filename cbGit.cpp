@@ -180,7 +180,32 @@ void cbGit::OnFileSaveOrClose(CodeBlocksEvent& event)
 
 void cbGit::OnRevert(wxCommandEvent& event)
 {
-    UpdateThread(forCommandSelectedProject);
+    if(!forCommandSelectedProject->SaveAllFiles())
+        return;
+    std::string str = forCommandSelectedProject->GetBasePath().ToStdString();
+    std::size_t found = str.find_last_of("/", str.size()-2);                                                 // exclude slash on end of string from search
+                                                                                                             // To Do:
+    std::string repopath = repository::discover_path(forCommandSelectedFileName,false,str.substr(0,found));  // git_expception crashes cb when no repo is found
+
+    repopath = repopath.substr(0,repopath.size()-5);
+    auto repo = repository::open(repopath);
+    if(!repo.is_empty())
+    {
+        std::string relativefilepath = forCommandSelectedFileName.substr(repopath.size());
+        status::status_type singelFile = repo.status_file(relativefilepath);
+        if((singelFile == status::status_type::index_modified) || (singelFile == status::status_type::wt_modified) )
+        {
+            checkout::options checkoutOptions;
+            const std::vector<std::string> checkoutpaths{"/" + relativefilepath};
+            checkoutOptions.set_strategy(checkout::checkout_strategy::force | checkout::checkout_strategy::disable_pathspec_match);
+            repo.checkout_head(checkoutOptions);
+            Manager::Get()->GetEditorManager()->CheckForExternallyModifiedFiles();
+            if(!forCommandSelectedProject->SaveAllFiles())
+                return;
+            UpdateThread(forCommandSelectedProject);
+        }
+    }
+
 }
 
 void cbGit::OnStateScannerThread(wxCommandEvent& event)
@@ -191,7 +216,7 @@ void cbGit::OnStateScannerThread(wxCommandEvent& event)
 
     cbGitStateScannerThread::return_t *statemap = (cbGitStateScannerThread::return_t*)event.GetClientData();
     cbProject *prj = statemap->first;
-    wxMessageBox(wxString("Recieved thread for Project")+prj->GetBasePath());
+//    wxMessageBox(wxString("Recieved thread for Project")+prj->GetBasePath());
 
     if(!Manager::Get()->GetProjectManager()->IsProjectStillOpen(prj))
     {
