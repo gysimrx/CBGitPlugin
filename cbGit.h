@@ -18,6 +18,7 @@
 #endif
 
 #include <cbplugin.h> // for "class cbPlugin"
+#include "cbGitStates.h"
 class ProjectFile;
 
 class cbGit : public cbPlugin
@@ -132,6 +133,9 @@ class cbGit : public cbPlugin
 
         std::string forCommandSelectedFileName;
         cbProject *forCommandSelectedProject;
+        typedef std::map<std::string, cbGitFileState> filestatemap_t ;
+        std::map<cbProject*, filestatemap_t*> mapOfOpenPrj;
+
 
     private:
         DECLARE_EVENT_TABLE();

@@ -77,7 +77,7 @@ void cbGitStateScannerThread::GetFileStates(cppgit2::repository &repo, std::map 
     status::options optionobj;
     optionobj.set_flags(status::options::flag::include_unmodified | status::options::flag::include_untracked | status::options::flag::include_ignored | status::options::flag::recurse_ignored_dirs | status::options::flag::recurse_untracked_dirs  );
     repo.for_each_status( optionobj,
-        [&prjmap, &additonalpath](const std::string &path, status::status_type status_flags)
+        [&prjpath, &prjmap, &additonalpath](const std::string &path, status::status_type status_flags)
         {
 
             cbGitFileState statusofFile;
@@ -103,7 +103,7 @@ void cbGitStateScannerThread::GetFileStates(cppgit2::repository &repo, std::map 
             if ((status_flags & status::status_type::ignored) == status::status_type::ignored)
             statusofFile.state = cbGitFileState::ignored;
 
-            (*prjmap)[additonalpath+path] =  statusofFile; // Subrepos need nonrelative paths
+            (*prjmap)[prjpath+additonalpath+path] =  statusofFile; // Subrepos need nonrelative paths
 
         });
 

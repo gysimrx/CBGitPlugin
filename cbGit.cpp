@@ -130,7 +130,19 @@ void cbGit::appendMenu(cbProject *prj, ProjectFile *prjFile, wxMenu *menu)
     wxMenu *gitMenu = new wxMenu();
     forCommandSelectedFileName = std::string(prjFile->file.GetFullPath().c_str());
     forCommandSelectedProject = prj;
-    gitMenu->Append(ID_REVERT, "Revert", "revert to base");
+
+    if(mapOfOpenPrj.count(forCommandSelectedProject) == 1)
+    {
+        filestatemap_t* filestates = mapOfOpenPrj[forCommandSelectedProject];
+        if(filestates->count(forCommandSelectedFileName) == 1)      // File is versioned
+        {
+            cbGitFileState stateOfFile = filestates->at(forCommandSelectedFileName);
+            if(stateOfFile.state == cbGitFileState::modified)
+                gitMenu->Append(ID_REVERT, "Revert", "revert to base");
+        }
+    }
+
+
     gitMenu->Append(ID_FORCEUPDATE, "ForceUpdate", "Force UpdateThread for Testing");
     menu->AppendSubMenu(gitMenu, "GIT");
 }
@@ -180,52 +192,45 @@ void cbGit::OnFileSaveOrClose(CodeBlocksEvent& event)
 
 void cbGit::OnRevert(wxCommandEvent& event)
 {
-    if(!forCommandSelectedProject->SaveAllFiles())
-        return;
     std::string str = forCommandSelectedProject->GetBasePath().ToStdString();
     std::size_t found = str.find_last_of("/", str.size()-2);                                                 // exclude slash on end of string from search
 
-    ProjectFile *prjfile = forCommandSelectedProject->GetFileByFilename(wxString(forCommandSelectedFileName),false,true);
-    if(prjfile == NULL)
+    std::string repopath = repository::discover_path(forCommandSelectedFileName,false,str.substr(0,found));
+    repopath = repopath.substr(0,repopath.size()-5);
+    auto repo = repository::open(repopath);
+    std::string relativefilepath = forCommandSelectedFileName.substr(repopath.size());
+
+    checkout::options checkoutOptions;
+    const std::vector<std::string> checkoutpaths{"/" + relativefilepath};
+    checkoutOptions.set_strategy(checkout::checkout_strategy::force | checkout::checkout_strategy::disable_pathspec_match);
+    repo.checkout_head(checkoutOptions);
+    Manager::Get()->GetEditorManager()->CheckForExternallyModifiedFiles();
+    if(!forCommandSelectedProject->SaveAllFiles())
         return;
+    UpdateThread(forCommandSelectedProject);
 
-    if(prjfile->GetFileState() == fvsVcModified)                                                                // Isn't safe if a second Plugin sets visual file states and Files need to be saved manually before revert
-    {
-                                                                                                                 // To Do:
-        std::string repopath = repository::discover_path(forCommandSelectedFileName,false,str.substr(0,found));  // git_expception crashes cb when no repo is found
-        repopath = repopath.substr(0,repopath.size()-5);
-        auto repo = repository::open(repopath);
 
-        std::string relativefilepath = forCommandSelectedFileName.substr(repopath.size());
-        status::status_type singelFile = repo.status_file(relativefilepath);
-        if((singelFile == status::status_type::index_modified) || (singelFile == status::status_type::wt_modified) )
-        {
-            checkout::options checkoutOptions;
-            const std::vector<std::string> checkoutpaths{"/" + relativefilepath};
-            checkoutOptions.set_strategy(checkout::checkout_strategy::force | checkout::checkout_strategy::disable_pathspec_match);
-            repo.checkout_head(checkoutOptions);
-            Manager::Get()->GetEditorManager()->CheckForExternallyModifiedFiles();
-            if(!forCommandSelectedProject->SaveAllFiles())
-                return;
-            UpdateThread(forCommandSelectedProject);
-        }
-    }
 }
 
 void cbGit::OnStateScannerThread(wxCommandEvent& event)
 {
     typedef std::map<std::string, cbGitFileState> statemap_t ;
 
+
+
     cbGitFileState statusofFile;
 
     cbGitStateScannerThread::return_t *statemap = (cbGitStateScannerThread::return_t*)event.GetClientData();
     cbProject *prj = statemap->first;
+    mapOfOpenPrj[prj] = statemap->second;
+
 //    wxMessageBox(wxString("Recieved thread for Project")+prj->GetBasePath());
 
     if(!Manager::Get()->GetProjectManager()->IsProjectStillOpen(prj))
     {
-        delete statemap;
         wxMessageBox(wxString("Project ")+prj->GetBasePath()+wxString(" Is not opend"));
+        mapOfOpenPrj.erase(prj);
+        delete statemap;
         return;
     }
 
