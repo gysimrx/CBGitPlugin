@@ -184,13 +184,18 @@ void cbGit::OnRevert(wxCommandEvent& event)
         return;
     std::string str = forCommandSelectedProject->GetBasePath().ToStdString();
     std::size_t found = str.find_last_of("/", str.size()-2);                                                 // exclude slash on end of string from search
-                                                                                                             // To Do:
-    std::string repopath = repository::discover_path(forCommandSelectedFileName,false,str.substr(0,found));  // git_expception crashes cb when no repo is found
 
-    repopath = repopath.substr(0,repopath.size()-5);
-    auto repo = repository::open(repopath);
-    if(!repo.is_empty())
+    ProjectFile *prjfile = forCommandSelectedProject->GetFileByFilename(wxString(forCommandSelectedFileName),false,true);
+    if(prjfile == NULL)
+        return;
+
+    if(prjfile->GetFileState() == fvsVcModified)                                                                // Isn't safe if a second Plugin sets visual file states and Files need to be saved manually before revert
     {
+                                                                                                                 // To Do:
+        std::string repopath = repository::discover_path(forCommandSelectedFileName,false,str.substr(0,found));  // git_expception crashes cb when no repo is found
+        repopath = repopath.substr(0,repopath.size()-5);
+        auto repo = repository::open(repopath);
+
         std::string relativefilepath = forCommandSelectedFileName.substr(repopath.size());
         status::status_type singelFile = repo.status_file(relativefilepath);
         if((singelFile == status::status_type::index_modified) || (singelFile == status::status_type::wt_modified) )
@@ -205,7 +210,6 @@ void cbGit::OnRevert(wxCommandEvent& event)
             UpdateThread(forCommandSelectedProject);
         }
     }
-
 }
 
 void cbGit::OnStateScannerThread(wxCommandEvent& event)
