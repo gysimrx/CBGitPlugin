@@ -10,9 +10,9 @@
 #include <wx/dynlib.h>
 #include <logmanager.h>
 #include <wx/dir.h>
-
-
 #include <cppgit2/repository.hpp>
+#include <stdlib.h>
+
 using namespace cppgit2;
 
 // Register the plugin with Code::Blocks.
@@ -21,6 +21,7 @@ namespace
 {
     PluginRegistrant<cbGit> reg(_T("cbGit"));
         auto ID_REVERT            = wxNewId();
+        auto ID_DIFF              = wxNewId();
         auto ID_FORCEUPDATE       = wxNewId();
 }
 
@@ -28,6 +29,7 @@ namespace
 BEGIN_EVENT_TABLE(cbGit, cbPlugin)
     EVT_COMMAND(wxID_ANY, wxEVT_SCANNER_THREAD_UPDATE, cbGit::OnStateScannerThread)
     EVT_MENU(ID_REVERT,     cbGit::OnRevert)
+    EVT_MENU(ID_DIFF,       cbGit::OnDiff)
     EVT_MENU(ID_FORCEUPDATE,     cbGit::StartUpdateThread)
 
     // add any events you want to handle here
@@ -138,7 +140,11 @@ void cbGit::appendMenu(cbProject *prj, ProjectFile *prjFile, wxMenu *menu)
         {
             cbGitFileState stateOfFile = filestates->at(forCommandSelectedFileName);
             if(stateOfFile.state == cbGitFileState::modified)
+            {
                 gitMenu->Append(ID_REVERT, "Revert", "revert to base");
+                gitMenu->Append(ID_DIFF, "Diff", "diff selected file with head");
+
+            }
         }
     }
 
@@ -192,6 +198,59 @@ void cbGit::OnFileSaveOrClose(CodeBlocksEvent& event)
 
 void cbGit::OnRevert(wxCommandEvent& event)
 {
+    checkoutFile();
+
+    Manager::Get()->GetEditorManager()->CheckForExternallyModifiedFiles();
+    if(!forCommandSelectedProject->SaveAllFiles())
+        return;
+    UpdateThread(forCommandSelectedProject);
+
+
+}
+void cbGit::OnDiff(wxCommandEvent& event)
+{
+    if(!forCommandSelectedProject->SaveAllFiles())
+        return;
+
+    wxCopyFile(forCommandSelectedFileName, forCommandSelectedFileName+(".temp"),false);
+    checkoutFile();
+    wxCopyFile(forCommandSelectedFileName, forCommandSelectedFileName+(".head"),false);
+    wxCopyFile(forCommandSelectedFileName+(".temp"), forCommandSelectedFileName ,true);
+    wxRemoveFile(forCommandSelectedFileName+(".temp"));
+
+
+    if(Manager::Get()->GetPluginManager()->FindPluginByName(_T("cbDiff")) != NULL)
+    {
+        PluginElement* element = Manager::Get()->GetPluginManager()->FindElementByName(_T("cbDiff"));
+        // is library loaded
+        if(element->library->IsLoaded())
+        {
+            typedef void (*cbDiffFunc) (const wxString&, const wxString&, int viewmode);
+
+            cbDiffFunc difffunc = (cbDiffFunc)element->library->GetSymbol(_("DiffFiles"));
+            if(difffunc != NULL)
+            {
+                difffunc(wxString(forCommandSelectedFileName), wxString(forCommandSelectedFileName+".head"), -1);
+            }
+        }
+	}
+	 if(!forCommandSelectedProject->SaveAllFiles())
+        return;
+/*
+     EditorManager::CheckForExternallyModifiedFiles()(); Codeblocks checks for changes when focus is newly set to CodeBlocks
+     if there are files like main.cpp and main.h in your Project Tree and you select main.cpp to diff, main.h gets reverted
+*/
+
+////    std::string str = "meld "+forCommandSelectedFileName+" "+forCommandSelectedFileName+".head" +" &"; // running it in background with "&" works on commandline but here it opens a third File
+////    const char *command = str.c_str();                                                                 // So meld has to be closed to use Codeblocks again
+////    wxArrayString output;
+////    wxArrayString errors;
+////    wxExecute (command, output, errors);
+
+}
+
+void cbGit::checkoutFile (void)
+{
     std::string str = forCommandSelectedProject->GetBasePath().ToStdString();
     std::size_t found = str.find_last_of("/", str.size()-2);                                                 // exclude slash on end of string from search
 
@@ -204,11 +263,6 @@ void cbGit::OnRevert(wxCommandEvent& event)
     const std::vector<std::string> checkoutpaths{"/" + relativefilepath};
     checkoutOptions.set_strategy(checkout::checkout_strategy::force | checkout::checkout_strategy::disable_pathspec_match);
     repo.checkout_head(checkoutOptions);
-    Manager::Get()->GetEditorManager()->CheckForExternallyModifiedFiles();
-    if(!forCommandSelectedProject->SaveAllFiles())
-        return;
-    UpdateThread(forCommandSelectedProject);
-
 
 }
 

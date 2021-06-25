@@ -123,7 +123,9 @@ class cbGit : public cbPlugin
         void OnFileSaveOrClose(CodeBlocksEvent& event);
 
         void StartUpdateThread(wxCommandEvent& event);
+        void checkoutFile (void);
         void OnRevert(wxCommandEvent& event);
+        void OnDiff(wxCommandEvent& event);
 
         void appendMenu(cbProject *prj, ProjectFile *prjFile, wxMenu *menu);
         void OnStateScannerThread(wxCommandEvent& event);
