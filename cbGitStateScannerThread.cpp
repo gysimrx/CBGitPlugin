@@ -1,115 +1,81 @@
 #include "cbGitStateScannerThread.h"
 #include "cbGitStates.h"
-#include <cppgit2/repository.hpp>
 //#include <sdk.h>
 #include <iostream>
 #include <cbproject.h>
-#include <wx/dir.h>
-using namespace cppgit2;
+#include <fstream>
 
-wxDEFINE_EVENT( wxEVT_SCANNER_THREAD_UPDATE, wxCommandEvent);
+wxDEFINE_EVENT(wxEVT_SCANNER_THREAD_UPDATE, wxCommandEvent);
 
-class wxDirTraverserSimple2 : public wxDirTraverser
-{
-  public:
-    wxDirTraverserSimple2(wxArrayString& files) : m_files(files){}
-    virtual wxDirTraverseResult OnFile(const wxString& filename)
-    {
-        wxString temp = filename.substr(filename.size()-3);
-
-        return wxDIR_CONTINUE;
-    }
-    virtual wxDirTraverseResult OnDir(const wxString& dirname)
-    {
-        wxString temp = dirname.substr(dirname.size()-3);
-        if(temp == "git")
-        {
-            temp = dirname.substr(0,dirname.size()-5);
-            m_files.Add(temp );
-
-        }
-      return wxDIR_CONTINUE;
-    }
-  private:
-    wxArrayString& m_files;
-};
-
-cbGitStateScannerThread::cbGitStateScannerThread(wxEvtHandler* pHandler, cbProject *prj) :
+cbGitStateScannerThread::cbGitStateScannerThread(wxEvtHandler *pHandler, cbProject *prj):
     wxThread(wxTHREAD_DETACHED),
     prj_(prj),
     m_pHandler(pHandler)
-    {}
+{
+    prjPath_ = prj_->GetBasePath().ToStdString();
+
+    for (int idx = 0 ; idx < prj_->GetFilesCount() ; ++idx)
+    {
+        ProjectFile *prjFile = prj_->GetFile(idx);
+        files_.push_back(prjFile->file.GetFullPath().ToStdString());
+    }
+}
 
 void *cbGitStateScannerThread::Entry()
 {
-    wxString wxpath = prj_->GetBasePath();
-    std::string path = wxpath.ToStdString();
-    auto prjmap = new std::map <std::string, cbGitFileState>;
+    auto prjmap = new prjmap_t;
 
-    wxArrayString files;
-    wxDirTraverserSimple2 traverser(files);
-    wxDir dir(path);
-    dir.Traverse(traverser);
-
-    while(!files.empty())
+    for (auto file: files_)
     {
-        std::string repopath = files.back().ToStdString();
-        auto repo2 = repository::open(repopath);
-        GetFileStates(repo2, prjmap);
-        files.pop_back();
+        wxFileName fname(file.c_str());
+        git_repository *repo = NULL;
+        /* Open repository, walking up from given directory to find root */
+        int error = git_repository_open_ext(&repo, fname.GetPath(false).c_str(), 0, NULL);
+        if (error < 0)
+            continue;
+
+        wxString repoPath = git_repository_path(repo);
+        if (repoPath.EndsWith(".git/"))
+            repoPath = repoPath.Mid(0, repoPath.length()-5);
+        fname.MakeRelativeTo(repoPath);
+
+        unsigned int statusFlags;
+        error = git_status_file(&statusFlags, repo, fname.GetFullPath().c_str());
+        git_repository_free(repo);
+        if (error < 0)
+            continue;
+
+        cbGitFileState statusOfFile;
+        if (statusFlags & (GIT_STATUS_INDEX_MODIFIED | GIT_STATUS_WT_MODIFIED))
+            statusOfFile.state = cbGitFileState::modified;
+
+        if (statusFlags & (GIT_STATUS_INDEX_DELETED | GIT_STATUS_WT_DELETED))
+            statusOfFile.state = cbGitFileState::deleted;
+
+        if (statusFlags & (GIT_STATUS_INDEX_NEW | GIT_STATUS_WT_NEW))
+            statusOfFile.state = cbGitFileState::newfile;
+
+        if (statusFlags & (GIT_STATUS_INDEX_RENAMED | GIT_STATUS_WT_RENAMED))
+            statusOfFile.state = cbGitFileState::renamed;
+
+        if (statusFlags & GIT_STATUS_IGNORED)
+            statusOfFile.state = cbGitFileState::ignored;
+
+        if (statusFlags & GIT_STATUS_CONFLICTED)
+            statusOfFile.state = cbGitFileState::conflicted;
+
+        (*prjmap)[file] = statusOfFile;
     }
+
+    if (!prjmap->size())
+    {
+        delete prjmap;
+        return 0;
+    }
+
     wxCommandEvent *evt = new wxCommandEvent(wxEVT_SCANNER_THREAD_UPDATE, GetId());
-    evt->SetClientData(new std::pair<cbProject*, prjmap_t*> {prj_, prjmap});
+    evt->SetClientData(new return_t{prj_, prjmap});
     wxQueueEvent(m_pHandler, evt);
     return 0;
 }
 
-void cbGitStateScannerThread::GetFileStates(cppgit2::repository &repo, std::map <std::string, cbGitFileState>*  prjmap )
-{
-    wxString wxpath = prj_->GetBasePath();
-    std::string prjpath = wxpath.ToStdString();
-    wxpath = repo.path(repository::item::workdir);
-    std::string repopath = wxpath.ToStdString();
-    std::string additonalpath;
-    if(prjpath != repopath)
-        additonalpath = repopath.substr(prjpath.size(),repopath.size());
-
-    status::options optionobj;
-    optionobj.set_flags(status::options::flag::include_unmodified | status::options::flag::include_untracked | status::options::flag::include_ignored | status::options::flag::recurse_ignored_dirs | status::options::flag::recurse_untracked_dirs  );
-    repo.for_each_status( optionobj,
-        [&prjpath, &prjmap, &additonalpath](const std::string &path, status::status_type status_flags)
-        {
-
-            cbGitFileState statusofFile;
-            statusofFile.state = cbGitFileState::unmodified;
-            if ((status_flags & status::status_type::index_deleted) == status::status_type::index_deleted)
-                statusofFile.state = cbGitFileState::deleted;
-
-            if ((status_flags & status::status_type::wt_deleted) == status::status_type::wt_deleted)
-                statusofFile.state = cbGitFileState::deleted;
-
-            if ((status_flags & status::status_type::index_new) == status::status_type::index_new)
-                statusofFile.state = cbGitFileState::newfile;
-
-            if ((status_flags & status::status_type::wt_new) == status::status_type::wt_new)
-                statusofFile.state = cbGitFileState::newfile;
-
-            if ((status_flags & status::status_type::index_modified) == status::status_type::index_modified)
-                statusofFile.state = cbGitFileState::modified;
-
-            if ((status_flags & status::status_type::wt_modified) == status::status_type::wt_modified)
-                statusofFile.state = cbGitFileState::modified;
-
-            if ((status_flags & status::status_type::ignored) == status::status_type::ignored)
-            statusofFile.state = cbGitFileState::ignored;
-
-            (*prjmap)[prjpath+additonalpath+path] =  statusofFile; // Subrepos need nonrelative paths
-
-        });
-
-}
-
-
-cbGitStateScannerThread::~cbGitStateScannerThread()
-{
-}

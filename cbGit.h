@@ -24,10 +24,8 @@ class ProjectFile;
 class cbGit : public cbPlugin
 {
     public:
-        /** Constructor. */
         cbGit();
-        /** Destructor. */
-        virtual ~cbGit();
+        virtual ~cbGit(){}
 
         /** Return the plugin's configuration priority.
           * This is a number (default is 50) that is used to sort plugins
@@ -123,7 +121,6 @@ class cbGit : public cbPlugin
         void OnFileSaveOrClose(CodeBlocksEvent& event);
 
         void StartUpdateThread(wxCommandEvent& event);
-        void checkoutFile (void);
         void OnRevert(wxCommandEvent& event);
         void OnDiff(wxCommandEvent& event);
 
@@ -131,16 +128,17 @@ class cbGit : public cbPlugin
         void OnStateScannerThread(wxCommandEvent& event);
 
         void UpdateThread(cbProject *project);
-        void UpdateThread(void);
+        void UpdateThread();
 
-        std::string forCommandSelectedFileName;
-        cbProject *forCommandSelectedProject;
+        std::string forCommandSelectedFileName_;
+        cbProject *forCommandSelectedProject_;
         typedef std::map<std::string, cbGitFileState> filestatemap_t ;
-        std::map<cbProject*, filestatemap_t*> mapOfOpenPrj;
-
+        typedef std::map<cbProject*, filestatemap_t*> mapOfOpenPrj_t;
+        mapOfOpenPrj_t mapOfOpenPrj_;
 
     private:
         DECLARE_EVENT_TABLE();
 };
 
-#endif // CBGIT_H_INCLUDED
+#endif
+

@@ -17,8 +17,10 @@ public:
 
     };
     state_t state;
-
+    cbGitFileState():
+        state(unmodified)
+    {}
 };
 
+#endif
 
-#endif // CBGITSTATES_H
